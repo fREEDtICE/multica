@@ -12,8 +12,26 @@ import (
 
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/multica-ai/multica/server/internal/cloudruntime"
+	"github.com/multica-ai/multica/server/internal/cloudruntime/provision"
 	"github.com/multica-ai/multica/server/internal/logger"
 )
+
+// buildCloudRuntimeProxy selects the managed Fleet client by default, or the
+// self-hosted built-in provisioner when MULTICA_CLOUD_URL is unset and the
+// MULTICA_CLOUD_BUILTIN switch is enabled. A misconfigured built-in driver
+// logs and falls back to the (disabled) Fleet client rather than starting half-wired.
+func buildCloudRuntimeProxy(cfg Config) cloudRuntimeProxy {
+	client := cloudruntime.NewClient(cloudruntime.Config{
+		BaseURL: cfg.CloudURL,
+		Timeout: cfg.CloudTimeout,
+	})
+	if cfg.CloudURL == "" && provision.BuiltinEnabled() {
+		if builtin := provision.NewFromEnvOrDisable(); builtin != nil {
+			return builtin
+		}
+	}
+	return client
+}
 
 const maxCloudRuntimeRequestBodySize = 1 << 20
 

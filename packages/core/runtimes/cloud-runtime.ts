@@ -4,6 +4,8 @@ import { api } from "../api";
 export interface CloudRuntimeNode {
   id: string;
   owner_id: string;
+  // Optional for backends that predate multi-vendor support; absent means AWS.
+  provider?: string;
   instance_id: string;
   region: string;
   instance_type: string;
@@ -23,6 +25,8 @@ export interface ListCloudRuntimeNodesParams {
 }
 
 export interface CreateCloudRuntimeNodeRequest {
+  // "aws" (default) or "aliyun"; selects the built-in provisioning driver.
+  provider?: string;
   instance_type: string;
   name?: string;
   region?: string;

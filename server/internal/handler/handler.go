@@ -563,10 +563,7 @@ func New(queries *db.Queries, txStarter txStarter, hub *realtime.Hub, bus *event
 		WebhookIPRateLimiter:         NewMemoryWebhookIPRateLimiter(DefaultWebhookIPRateLimit()),
 		WebhookAbsoluteIPRateLimiter: NewMemoryWebhookAbsoluteIPRateLimiter(DefaultWebhookAbsoluteIPRateLimit()),
 		InvitationRateLimiters:       NewMemoryInvitationRateLimiters(DefaultInvitationRateLimits()),
-		CloudRuntime: cloudruntime.NewClient(cloudruntime.Config{
-			BaseURL: cfg.CloudURL,
-			Timeout: cfg.CloudTimeout,
-		}),
+		CloudRuntime: buildCloudRuntimeProxy(cfg),
 		LLM: llmClient,
 		cfg: cfg,
 	}

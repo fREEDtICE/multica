@@ -2189,6 +2189,8 @@ export const ChildIssueProgressResponseSchema = z.object({
 export const CloudRuntimeNodeSchema = z.object({
   id: z.string(),
   owner_id: z.string(),
+  // Optional for older backends; callers treat a missing value as AWS.
+  provider: z.string().optional(),
   instance_id: z.string(),
   region: z.string(),
   instance_type: z.string(),

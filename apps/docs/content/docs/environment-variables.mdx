@@ -431,6 +431,15 @@ First-party self-host telemetry sends one deployment-level snapshot per UTC day 
 
 `DO_NOT_TRACK` and `ANALYTICS_DISABLED` are independent. The former controls this first-party anonymous snapshot; the latter controls the optional PostHog integration.
 
+## Built-in cloud runtime
+
+When `MULTICA_CLOUD_URL` is unset, set `MULTICA_CLOUD_BUILTIN=true` to open AWS EC2 / Alibaba Cloud ECS Agent runtimes directly instead of through the managed Multica Cloud Fleet. `MULTICA_CLOUD_BUILTIN_CONFIG` carries the JSON configuration: provider credential environment names, region, image, network, state path and readiness timeouts. Leave both unset to keep the default managed-Fleet behavior. An instance receives only an IAM/RAM role reference and a short-lived task lease; long-lived cloud keys are never embedded.
+
+| Variable | Default | Description |
+|---|---|---|
+| `MULTICA_CLOUD_BUILTIN` | empty (disabled) | Set `true` to enable the self-hosted built-in provisioner; consulted only when `MULTICA_CLOUD_URL` is empty |
+| `MULTICA_CLOUD_BUILTIN_CONFIG` | empty | JSON configuration for the built-in provisioner |
+
 ## Next steps
 
 - [Sign-in and signup](/auth-setup) — sign-in methods and signup restrictions.

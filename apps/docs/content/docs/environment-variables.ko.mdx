@@ -425,6 +425,15 @@ multica config show
 
 `DO_NOT_TRACK`과 `ANALYTICS_DISABLED`는 서로 독립적입니다. 전자는 이 익명 스냅샷을, 후자는 선택 사항인 PostHog 연동을 제어합니다.
 
+## 내장 클라우드 런타임
+
+`MULTICA_CLOUD_URL`이 설정되지 않은 경우 `MULTICA_CLOUD_BUILTIN=true`로 설정하면 관리형 Multica Cloud Fleet를 거치지 않고 AWS EC2 / Alibaba Cloud ECS Agent 런타임을 직접 개통할 수 있습니다. `MULTICA_CLOUD_BUILTIN_CONFIG`에는 JSON 설정(공급자 자격 증명 환경 변수 이름, 리전, 이미지, 네트워크, 상태 파일 경로, 준비 대기 시간)을 담습니다. 두 변수를 모두 설정하지 않으면 기본 관리형 Fleet 동작이 유지됩니다. 인스턴스에는 IAM/RAM 역할 참조와 단기 태스크 임대만 부여되며 장기 클라우드 키는 절대 포함되지 않습니다.
+
+| 변수 | 기본값 | 설명 |
+|---|---|---|
+| `MULTICA_CLOUD_BUILTIN` | 비어 있음(비활성화) | 자체 호스팅 내장 프로비저너를 활성화하려면 `true`로 설정. `MULTICA_CLOUD_URL`이 비어 있을 때만 적용 |
+| `MULTICA_CLOUD_BUILTIN_CONFIG` | 비어 있음 | 내장 프로비저너의 JSON 설정 |
+
 ## 다음 단계
 
 - [로그인과 가입](/auth-setup) — 로그인 방식과 가입 제한을 알아봅니다.
