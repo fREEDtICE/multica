@@ -20,11 +20,26 @@ const (
 // Node lifecycle states. They mirror the status vocabulary already used by
 // the cloud runtime web client so the UI needs no translation.
 const (
-	StatusLaunching  = "launching"
-	StatusPending    = "pending"
-	StatusRunning    = "running"
-	StatusTerminated = "terminated"
-	StatusFailed     = "failed"
+	StatusLaunching       = "launching"
+	StatusPending         = "pending"
+	StatusRunning         = "running"
+	StatusTerminated      = "terminated"
+	StatusFailed          = "failed"
+	StatusCleanupRequired = "cleanup_required"
+)
+
+// Provisioning stages shown to the administrator as 开通中 → 接入中 → 已就绪.
+const (
+	StageProvisioning = "provisioning"
+	StageConnecting   = "connecting"
+	StageReady        = "ready"
+)
+
+// Cloud account verification states.
+const (
+	AccountPending  = "pending"
+	AccountVerified = "verified"
+	AccountFailed   = "failed"
 )
 
 // MaxLeaseSeconds caps the short-lived task lease rendered into user-data.
@@ -35,11 +50,14 @@ const MaxLeaseSeconds = 900
 type ErrCode string
 
 const (
-	ErrAuthorization ErrCode = "authorization_failed"
-	ErrTimeout       ErrCode = "provision_timeout"
-	ErrUnavailable   ErrCode = "runtime_unavailable"
-	ErrConfiguration ErrCode = "configuration_error"
-	ErrOrphan        ErrCode = "orphan_resource"
+	ErrAuthorization   ErrCode = "authorization_failed"
+	ErrTimeout         ErrCode = "provision_timeout"
+	ErrUnavailable     ErrCode = "runtime_unavailable"
+	ErrConfiguration   ErrCode = "configuration_error"
+	ErrOrphan          ErrCode = "orphan_resource"
+	ErrIdentityMissing ErrCode = "deployment_identity_missing"
+	ErrNoAccount       ErrCode = "no_verified_account"
+	ErrCleanupRequired ErrCode = "cleanup_required"
 )
 
 // DriverError carries a stable reason plus an actionable operator hint.
@@ -70,7 +88,10 @@ type Spec struct {
 	SubnetID         string
 	SecurityGroupIDs []string
 	InstanceProfile  string
-	UserData         string
+	// DiskSizeGB is the boot volume size rendered into the vendor's block
+	// device mapping; zero means the image default.
+	DiskSizeGB int
+	UserData   string
 	// ClientToken is the stable idempotency key derived from the node identity,
 	// so a retried launch never opens a second billable instance.
 	ClientToken string
@@ -127,6 +148,10 @@ type Config struct {
 	// StatePath, when non-empty, persists node records as JSON so a restart
 	// resumes the same instance instead of opening another one.
 	StatePath string
+	// AccountPath, when non-empty, persists connected cloud accounts and the
+	// workspace default runtime. Defaults to cloud-accounts.json next to
+	// StatePath.
+	AccountPath string
 	// ReadinessTimeout bounds the pending->running and registration waits.
 	ReadinessTimeout time.Duration
 	// PollInterval is the delay between cloud describe calls.

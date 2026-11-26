@@ -25,12 +25,36 @@ func newTestProvisioner(t *testing.T, providerName string, cloud *fakeCloud) (*L
 
 func doCreate(t *testing.T, p *LocalProvisioner, body map[string]any) (int, map[string]any) {
 	t.Helper()
+	if _, ok := body["account_id"]; !ok {
+		providerName, _ := body["provider"].(string)
+		if providerName == "" {
+			providerName = ProviderAWS
+		}
+		body["account_id"] = VerifyFakeAccount(t, p, providerName)
+	}
 	raw, _ := json.Marshal(body)
 	resp, err := p.Do(context.Background(), cloudruntime.Request{
 		Method: "POST", Path: "/api/v1/nodes", UserID: fakeOwner, Body: raw,
 	})
 	if err != nil {
 		t.Fatalf("create node: %v", err)
+	}
+	var out map[string]any
+	json.Unmarshal(resp.Body, &out)
+	return resp.StatusCode, out
+}
+
+func doRequest(t *testing.T, p *LocalProvisioner, method, path string, body any) (int, map[string]any) {
+	t.Helper()
+	var raw []byte
+	if body != nil {
+		raw, _ = json.Marshal(body)
+	}
+	resp, err := p.Do(context.Background(), cloudruntime.Request{
+		Method: method, Path: path, UserID: fakeOwner, Body: raw,
+	})
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
 	}
 	var out map[string]any
 	json.Unmarshal(resp.Body, &out)
@@ -133,9 +157,14 @@ func TestAuthorizationFailureBillsNothingThenRecovers(t *testing.T) {
 		t.Run(providerName, func(t *testing.T) {
 			cloud := newFakeCloud(providerName)
 			p, _ := newTestProvisioner(t, providerName, cloud)
+			// The account is verified while the role still works; the fault
+			// appears later, at launch time, mirroring a revoked permission.
+			accountID := VerifyFakeAccount(t, p, providerName)
 			cloud.authFailure = true
 
-			status, body := doCreate(t, p, map[string]any{"provider": providerName, "name": "auth"})
+			status, body := doCreate(t, p, map[string]any{
+				"provider": providerName, "name": "auth", "account_id": accountID,
+			})
 			errObj, _ := body["error"].(map[string]any)
 			if status != 403 || errObj["code"] != string(ErrAuthorization) || cloud.launches != 0 {
 				t.Fatalf("expected a 403 authorization failure with no launch, got %d %v launches=%d",
@@ -143,7 +172,9 @@ func TestAuthorizationFailureBillsNothingThenRecovers(t *testing.T) {
 			}
 
 			cloud.authFailure = false
-			status, node := doCreate(t, p, map[string]any{"provider": providerName, "name": "auth"})
+			status, node := doCreate(t, p, map[string]any{
+				"provider": providerName, "name": "auth", "account_id": accountID,
+			})
 			if status != 201 || node["status"] != StatusRunning || cloud.launches != 1 {
 				t.Fatalf("retry after authorization did not recover: status=%d node=%v launches=%d",
 					status, node, cloud.launches)
@@ -184,7 +215,7 @@ func TestTamperedSignatureRejected(t *testing.T) {
 	cloud := newFakeCloud(ProviderAWS)
 	p, _ := newTestProvisioner(t, ProviderAWS, cloud)
 	aws := p.cfg.Providers[ProviderAWS].(*AwsProvider)
-	aws.secretKey = fakeAWSSecretKey + "tampered"
+	aws.creds = staticCredentials{creds: Credentials{AccessKey: fakeAWSAccessKey, SecretKey: fakeAWSSecretKey + "tampered"}}
 
 	_, err := aws.Authorize(context.Background())
 	driverErr, ok := AsDriverError(err)

@@ -423,7 +423,7 @@ multica config show
 
 ## 內建雲執行時
 
-當未設定 `MULTICA_CLOUD_URL` 時，將 `MULTICA_CLOUD_BUILTIN` 設為 `true`，可直接開通 AWS EC2 / 阿里雲 ECS Agent 執行時，而不經過託管的 Multica Cloud Fleet。`MULTICA_CLOUD_BUILTIN_CONFIG` 承載 JSON 設定：廠商憑據環境變數名稱、地域、映像、網路、狀態檔案路徑與就緒逾時。兩者都不設定時保持預設的託管 Fleet 行為。執行個體只會取得 IAM/RAM 角色參照和短期任務租用，絕不內嵌長期雲金鑰。
+當未設定 `MULTICA_CLOUD_URL` 時，將 `MULTICA_CLOUD_BUILTIN` 設為 `true`，可直接開通 AWS EC2 / 阿里雲 ECS Agent 執行時，而不經過託管的 Multica Cloud Fleet。`MULTICA_CLOUD_BUILTIN_CONFIG` 承載 JSON 設定：廠商憑據環境變數名稱、地域、映像、網路、狀態檔案路徑與就緒逾時。兩者都不設定時保持預設的託管 Fleet 行為。執行個體只會取得 IAM/RAM 角色參照和短期任務租用，絕不內嵌長期雲金鑰。設定的廠商憑據僅作為自託管部署的信任身分，用於扮演管理員在產品內連線的 IAM/RAM 角色，產品只儲存角色 ARN，所有節點操作都使用 STS 短期憑據。部署身分缺失時，帳號連線與開通入口保持停用，並提示聯絡部署管理員。
 
 | 變數 | 預設值 | 說明 |
 |---|---|---|

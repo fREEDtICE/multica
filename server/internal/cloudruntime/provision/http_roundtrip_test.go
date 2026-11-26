@@ -45,10 +45,12 @@ func TestNodeContractOverHTTP(t *testing.T) {
 		t.Run(providerName, func(t *testing.T) {
 			statePath := filepath.Join(t.TempDir(), "nodes.json")
 			p, handle := NewFakeProvisionerHandle(t, providerName, statePath)
+			accountID := VerifyFakeAccount(t, p, providerName)
 			server := httptest.NewServer(nodeMux(p))
 			defer server.Close()
 
 			post := func(payload map[string]any) (int, map[string]any) {
+				payload["account_id"] = accountID
 				raw, _ := json.Marshal(payload)
 				req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
 					server.URL+"/api/v1/nodes", bytes.NewReader(raw))

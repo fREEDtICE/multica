@@ -328,9 +328,12 @@ import type {
   FeedbackKind,
 } from "../feedback/types";
 import type {
+  CloudRuntimeAccount,
   CloudRuntimeNode,
+  CloudTrustBundle,
   CreateCloudRuntimeNodeRequest,
   ListCloudRuntimeNodesParams,
+  VerifyCloudAccountRequest,
 } from "../runtimes/cloud-runtime";
 import { type Logger, noopLogger } from "../logger";
 import { createRequestId, createSafeId } from "../utils";
@@ -362,8 +365,15 @@ import {
   CommentsListSchema,
   CommentTriggerPreviewSchema,
   IssueTriggerPreviewSchema,
+  CloudRuntimeAccountListSchema,
+  CloudRuntimeAccountSchema,
+  CloudRuntimeCleanupListSchema,
+  CloudRuntimeDefaultSchema,
   CloudRuntimeNodeListSchema,
   CloudRuntimeNodeSchema,
+  CloudTrustBundleSchema,
+  EMPTY_CLOUD_RUNTIME_ACCOUNT,
+  EMPTY_CLOUD_TRUST_BUNDLE,
   AgentBuilderRuntimeSwitchSchema,
   AgentBuilderSessionSchema,
   AgentBuilderSessionListSchema,
@@ -2564,6 +2574,99 @@ export class ApiClient {
     await this.fetchRaw("/api/cloud-runtime/nodes", {
       method: "DELETE",
       body: JSON.stringify({ instance_id: instanceId }),
+      extraHeaders: { "Content-Type": "application/json" },
+    });
+  }
+
+  async cancelCloudRuntimeNode(nodeId: string): Promise<CloudRuntimeNode> {
+    const res = await this.fetchRaw("/api/cloud-runtime/nodes/cancel", {
+      method: "POST",
+      body: JSON.stringify({ id: nodeId }),
+      extraHeaders: { "Content-Type": "application/json" },
+    });
+    const raw = (await res.json()) as unknown;
+    return parseWithFallback(raw, CloudRuntimeNodeSchema, EMPTY_CLOUD_RUNTIME_NODE, {
+      endpoint: "POST /api/cloud-runtime/nodes/cancel",
+    });
+  }
+
+  async listCloudAccounts(): Promise<CloudRuntimeAccount[]> {
+    const raw = await this.fetch<unknown>("/api/cloud-runtime/accounts");
+    const parsed = parseWithFallback(
+      raw,
+      CloudRuntimeAccountListSchema,
+      { accounts: [] },
+      { endpoint: "GET /api/cloud-runtime/accounts" },
+    );
+    return parsed.accounts;
+  }
+
+  async getCloudTrustBundle(provider: string): Promise<CloudTrustBundle> {
+    const raw = await this.fetch<unknown>(
+      `/api/cloud-runtime/accounts/trust?provider=${encodeURIComponent(provider)}`,
+    );
+    return parseWithFallback(raw, CloudTrustBundleSchema, EMPTY_CLOUD_TRUST_BUNDLE(provider), {
+      endpoint: "GET /api/cloud-runtime/accounts/trust",
+    });
+  }
+
+  async verifyCloudAccount(
+    data: VerifyCloudAccountRequest,
+  ): Promise<CloudRuntimeAccount> {
+    const res = await this.fetchRaw("/api/cloud-runtime/accounts/verify", {
+      method: "POST",
+      body: JSON.stringify(data),
+      extraHeaders: { "Content-Type": "application/json" },
+    });
+    const raw = (await res.json()) as unknown;
+    return parseWithFallback(raw, CloudRuntimeAccountSchema, EMPTY_CLOUD_RUNTIME_ACCOUNT, {
+      endpoint: "POST /api/cloud-runtime/accounts/verify",
+    });
+  }
+
+  async deleteCloudAccount(accountId: string): Promise<void> {
+    await this.fetchRaw("/api/cloud-runtime/accounts", {
+      method: "DELETE",
+      body: JSON.stringify({ id: accountId }),
+      extraHeaders: { "Content-Type": "application/json" },
+    });
+  }
+
+  async listCloudRuntimeCleanup(): Promise<CloudRuntimeNode[]> {
+    const raw = await this.fetch<unknown>("/api/cloud-runtime/cleanup");
+    const parsed = parseWithFallback(
+      raw,
+      CloudRuntimeCleanupListSchema,
+      { nodes: [] },
+      { endpoint: "GET /api/cloud-runtime/cleanup" },
+    );
+    return parsed.nodes;
+  }
+
+  async retryCloudRuntimeCleanup(nodeId: string): Promise<CloudRuntimeNode> {
+    const res = await this.fetchRaw("/api/cloud-runtime/cleanup/retry", {
+      method: "POST",
+      body: JSON.stringify({ id: nodeId }),
+      extraHeaders: { "Content-Type": "application/json" },
+    });
+    const raw = (await res.json()) as unknown;
+    return parseWithFallback(raw, CloudRuntimeNodeSchema, EMPTY_CLOUD_RUNTIME_NODE, {
+      endpoint: "POST /api/cloud-runtime/cleanup/retry",
+    });
+  }
+
+  async getDefaultCloudRuntime(): Promise<string> {
+    const raw = await this.fetch<unknown>("/api/cloud-runtime/default-runtime");
+    const parsed = parseWithFallback(raw, CloudRuntimeDefaultSchema, { node_id: "" }, {
+      endpoint: "GET /api/cloud-runtime/default-runtime",
+    });
+    return parsed.node_id;
+  }
+
+  async setDefaultCloudRuntime(nodeId: string): Promise<void> {
+    await this.fetchRaw("/api/cloud-runtime/default-runtime", {
+      method: "PUT",
+      body: JSON.stringify({ node_id: nodeId }),
       extraHeaders: { "Content-Type": "application/json" },
     });
   }

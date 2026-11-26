@@ -1735,6 +1735,104 @@ describe("ApiClient", () => {
     );
   });
 
+  it("exchanges a role ARN for a verified cloud account", async () => {
+    const account = {
+      id: "cca-1",
+      provider: "aws",
+      label: "production",
+      role_arn: "arn:aws:iam::123456789012:role/MulticaCloudRuntime",
+      region: "us-east-1",
+      status: "verified",
+      identity: { account: "123456789012" },
+      created_at: "2026-11-26T00:00:00Z",
+      updated_at: "2026-11-26T00:00:00Z",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            provider: "aws",
+            identity_present: true,
+            trust_policy: "{}",
+            permissions_policy: "{}",
+            console_guide_url: "https://example.com/guide",
+            role_arn_example: account.role_arn,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(account), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ApiClient("https://api.example.test");
+    const bundle = await client.getCloudTrustBundle("aws");
+    const verified = await client.verifyCloudAccount({
+      provider: "aws",
+      role_arn: account.role_arn,
+    });
+
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      "https://api.example.test/api/cloud-runtime/accounts/trust?provider=aws",
+    );
+    expect(fetchMock.mock.calls[1]![0]).toBe(
+      "https://api.example.test/api/cloud-runtime/accounts/verify",
+    );
+    expect(fetchMock.mock.calls[1]![1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({ provider: "aws", role_arn: account.role_arn }),
+    });
+    expect(bundle.identity_present).toBe(true);
+    expect(verified).toMatchObject({ id: "cca-1", status: "verified" });
+  });
+
+  it("lists connected accounts, cleanup queue and manages the default runtime", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ accounts: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ nodes: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ node_id: "crn-1" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ApiClient("https://api.example.test");
+    await expect(client.listCloudAccounts()).resolves.toEqual([]);
+    await expect(client.listCloudRuntimeCleanup()).resolves.toEqual([]);
+    await expect(client.getDefaultCloudRuntime()).resolves.toBe("crn-1");
+    await client.setDefaultCloudRuntime("crn-1");
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "https://api.example.test/api/cloud-runtime/accounts",
+      "https://api.example.test/api/cloud-runtime/cleanup",
+      "https://api.example.test/api/cloud-runtime/default-runtime",
+      "https://api.example.test/api/cloud-runtime/default-runtime",
+    ]);
+    expect(fetchMock.mock.calls[3]![1]).toMatchObject({
+      method: "PUT",
+      body: JSON.stringify({ node_id: "crn-1" }),
+    });
+  });
+
   describe("getAttachment", () => {
     it("uses the attachment-owned workspace endpoint for Markdown downloads", async () => {
       const fetchMock = vi.fn().mockResolvedValue(

@@ -13,16 +13,22 @@ import (
 // CloudRuntimeNode contract the web client already consumes, with provider
 // added for the multi-vendor selection.
 type Node struct {
-	ID           string            `json:"id"`
-	OwnerID      string            `json:"owner_id"`
-	Provider     string            `json:"provider"`
-	InstanceID   string            `json:"instance_id"`
-	Region       string            `json:"region"`
-	InstanceType string            `json:"instance_type"`
-	ImageID      string            `json:"image_id"`
-	SubnetID     string            `json:"subnet_id"`
-	Name         string            `json:"name"`
-	Status       string            `json:"status"`
+	ID           string `json:"id"`
+	OwnerID      string `json:"owner_id"`
+	Provider     string `json:"provider"`
+	AccountID    string `json:"account_id,omitempty"`
+	RoleARN      string `json:"role_arn,omitempty"`
+	InstanceID   string `json:"instance_id"`
+	Region       string `json:"region"`
+	InstanceType string `json:"instance_type"`
+	ImageID      string `json:"image_id"`
+	SubnetID     string `json:"subnet_id"`
+	DiskSizeGB   int    `json:"disk_size_gb,omitempty"`
+	Name         string `json:"name"`
+	Status       string `json:"status"`
+	// Stage is the administrator-facing provisioning phase
+	// (provisioning → connecting → ready), independent of the cloud state.
+	Stage        string            `json:"stage,omitempty"`
 	ClientToken  string            `json:"client_token"`
 	UserDataHash string            `json:"user_data_sha256"`
 	LeaseHash    string            `json:"lease_sha256"`

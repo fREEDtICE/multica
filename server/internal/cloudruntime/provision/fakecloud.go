@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 )
 
@@ -27,14 +28,17 @@ type fakeInstance struct {
 // and operator-controlled faults. The production adapters run against it
 // unchanged, so the integration test exercises the same code path as live.
 type fakeCloud struct {
-	mu          sync.Mutex
-	provider    string
-	instances   map[string]*fakeInstance
-	tokenToID   map[string]string
-	counter     int
-	authFailure bool
-	stall       bool
-	launches    int
+	mu           sync.Mutex
+	provider     string
+	instances    map[string]*fakeInstance
+	tokenToID    map[string]string
+	counter      int
+	authFailure  bool
+	roleReject   bool
+	stall        bool
+	launches     int
+	lastLaunchAK string
+	lastDiskGB   string
 }
 
 func newFakeCloud(provider string) *fakeCloud {
@@ -123,15 +127,24 @@ func (f *fakeCloud) handleAWS(w http.ResponseWriter, r *http.Request) {
 		f.reject(w, http.StatusBadRequest, "MalformedQuery", "bad form", true)
 		return
 	}
+	accessKey, secretKey, sessionToken, ok := f.awsExpectedCredentials(r, form)
+	if !ok {
+		f.reject(w, http.StatusForbidden, "SignatureDoesNotMatch", "fake signature check failed", true)
+		return
+	}
 	signed, err := AWSSignRequest(r.Method, "http://"+r.Host+r.URL.Path, url.Values{},
 		map[string]string{"Content-Type": r.Header.Get("Content-Type")}, raw,
-		fakeAWSAccessKey, fakeAWSSecretKey, "", "us-east-1",
+		accessKey, secretKey, sessionToken, "us-east-1",
 		serviceForAction(form.Get("Action")), r.Header.Get("X-Amz-Date"))
 	if err != nil || signed["Authorization"] != r.Header.Get("Authorization") {
 		f.reject(w, http.StatusForbidden, "SignatureDoesNotMatch", "fake signature check failed", true)
 		return
 	}
 	action := form.Get("Action")
+	if f.roleReject && action == "AssumeRole" {
+		f.reject(w, http.StatusForbidden, "AccessDenied", "role trust policy does not allow this identity", true)
+		return
+	}
 	authGuarded := map[string]bool{"GetCallerIdentity": true, "DescribeSubnets": true,
 		"DescribeSecurityGroups": true, "RunInstances": true}
 	if f.authFailure && authGuarded[action] {
@@ -141,12 +154,27 @@ func (f *fakeCloud) handleAWS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/xml")
 	switch action {
 	case "GetCallerIdentity":
-		fmt.Fprint(w, `<GetCallerIdentityResponse><GetCallerIdentityResult><Account>123456789012</Account><Arn>arn:aws:iam::123456789012:user/helios</Arn><UserId>AIDAFAKE</UserId></GetCallerIdentityResult></GetCallerIdentityResponse>`)
+		account, arn, userID := "123456789012", "arn:aws:iam::123456789012:user/helios", "AIDAFAKE"
+		if sessionToken != "" {
+			arn = "arn:aws:sts::123456789012:assumed-role/MulticaCloudRuntime/helios-session"
+			userID = "AROAFAKE:helios-session"
+		}
+		fmt.Fprintf(w, `<GetCallerIdentityResponse><GetCallerIdentityResult><Account>%s</Account><Arn>%s</Arn><UserId>%s</UserId></GetCallerIdentityResult></GetCallerIdentityResponse>`,
+			account, arn, userID)
+	case "AssumeRole":
+		fmt.Fprint(w, `<AssumeRoleResponse><AssumeRoleResult><Credentials>`+
+			`<AccessKeyId>`+fakeAWSSessionKey+`</AccessKeyId>`+
+			`<SecretAccessKey>`+fakeAWSSessionSecret+`</SecretAccessKey>`+
+			`<SessionToken>`+fakeSessionToken+`</SessionToken>`+
+			`<Expiration>2099-01-01T00:00:00Z</Expiration>`+
+			`</Credentials></AssumeRoleResult></AssumeRoleResponse>`)
 	case "DescribeSubnets", "DescribeSecurityGroups":
 		fmt.Fprint(w, `<DescribeResponse><result><ok>true</ok></result></DescribeResponse>`)
 	case "RunInstances":
 		userData, _ := base64.StdEncoding.DecodeString(form.Get("UserData"))
 		inst := f.launch(string(userData), form.Get("ClientToken"))
+		f.lastLaunchAK = accessKey
+		f.lastDiskGB = form.Get("BlockDeviceMapping.1.Ebs.VolumeSize")
 		fmt.Fprintf(w, `<RunInstancesResponse><instancesSet><item><instanceId>%s</instanceId><imageId>%s</imageId><clientToken>%s</clientToken><instanceState><name>%s</name></instanceState><iamInstanceProfile><name>%s</name></iamInstanceProfile></item></instancesSet></RunInstancesResponse>`,
 			inst.id, form.Get("ImageId"), inst.clientToken, inst.state, form.Get("IamInstanceProfile.Name"))
 	case "DescribeInstances":
@@ -174,10 +202,43 @@ func (f *fakeCloud) handleAWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func serviceForAction(action string) string {
-	if action == "GetCallerIdentity" {
+	if action == "GetCallerIdentity" || action == "AssumeRole" {
 		return "sts"
 	}
 	return "ec2"
+}
+
+// awsExpectedCredentials selects the signing key pair the request must have
+// used: deployment identity keys without a session token, or the short-lived
+// assumed-role session keys together with their token.
+func (f *fakeCloud) awsExpectedCredentials(r *http.Request, form url.Values) (ak, sk, token string, ok bool) {
+	token = r.Header.Get("X-Amz-Security-Token")
+	auth := r.Header.Get("Authorization")
+	ak = credentialFromAuthorization(auth)
+	if token != "" {
+		if token != fakeSessionToken || ak != fakeAWSSessionKey {
+			return "", "", "", false
+		}
+		return fakeAWSSessionKey, fakeAWSSessionSecret, token, true
+	}
+	if ak != fakeAWSAccessKey {
+		return "", "", "", false
+	}
+	return fakeAWSAccessKey, fakeAWSSecretKey, "", true
+}
+
+func credentialFromAuthorization(auth string) string {
+	const marker = "Credential="
+	start := strings.Index(auth, marker)
+	if start < 0 {
+		return ""
+	}
+	rest := auth[start+len(marker):]
+	end := strings.Index(rest, "/")
+	if end < 0 {
+		return ""
+	}
+	return rest[:end]
 }
 
 // --------------------------------------------------------------------------- //
@@ -188,13 +249,18 @@ func (f *fakeCloud) handleAliyun(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	signature := query.Get("Signature")
 	query.Del("Signature")
-	if AliyunSignature(query, fakeAliyunSecretKey, http.MethodGet) != signature {
+	secretKey, ok := f.aliyunExpectedCredentials(query)
+	if !ok || AliyunSignature(query, secretKey, http.MethodGet) != signature {
 		f.reject(w, http.StatusForbidden, "SignatureDoesNotMatch", "fake signature check failed", false)
 		return
 	}
 	action := query.Get("Action")
+	if f.roleReject && action == "AssumeRole" {
+		f.reject(w, http.StatusForbidden, "NoPermission", "RAM role trust policy does not allow this identity", false)
+		return
+	}
 	authGuarded := map[string]bool{"DescribeRegions": true, "DescribeVSwitches": true,
-		"DescribeSecurityGroups": true, "RunInstances": true}
+		"DescribeSecurityGroups": true, "RunInstances": true, "GetCallerIdentity": true}
 	if f.authFailure && authGuarded[action] {
 		f.reject(w, http.StatusForbidden, "Forbidden.RAM", "test RAM user lacks "+action, false)
 		return
@@ -202,6 +268,23 @@ func (f *fakeCloud) handleAliyun(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	switch action {
+	case "GetCallerIdentity":
+		enc.Encode(map[string]any{
+			"AccountId":   "123456789012",
+			"Arn":         "acs:ram::123456789012:role/MulticaCloudRuntime",
+			"PrincipalId": "271234567890123456",
+			"RequestId":   "fake",
+		})
+	case "AssumeRole":
+		enc.Encode(map[string]any{
+			"Credentials": map[string]any{
+				"AccessKeyId":     fakeAliyunSessionAK,
+				"AccessKeySecret": fakeAliyunSessionSK,
+				"SecurityToken":   fakeSessionToken,
+				"Expiration":      "2099-01-01T00:00:00Z",
+			},
+			"RequestId": "fake",
+		})
 	case "DescribeRegions":
 		enc.Encode(map[string]any{"Regions": map[string]any{"Region": []map[string]string{{"RegionId": "cn-hangzhou"}}}})
 	case "DescribeVSwitches", "DescribeSecurityGroups":
@@ -209,6 +292,8 @@ func (f *fakeCloud) handleAliyun(w http.ResponseWriter, r *http.Request) {
 	case "RunInstances":
 		userData, _ := base64.StdEncoding.DecodeString(query.Get("UserData"))
 		inst := f.launch(string(userData), query.Get("ClientToken"))
+		f.lastLaunchAK = query.Get("AccessKeyId")
+		f.lastDiskGB = query.Get("SystemDisk.Size")
 		enc.Encode(map[string]any{"InstanceIdSets": map[string]any{"InstanceIdSet": []string{inst.id}}})
 	case "DescribeInstances":
 		var ids []string
@@ -234,4 +319,21 @@ func (f *fakeCloud) handleAliyun(w http.ResponseWriter, r *http.Request) {
 	default:
 		f.reject(w, http.StatusBadRequest, "InvalidAction", action, false)
 	}
+}
+
+// aliyunExpectedCredentials mirrors awsExpectedCredentials for the RPC
+// protocol: base identity keys without a token, or assumed-role session keys
+// together with SecurityToken.
+func (f *fakeCloud) aliyunExpectedCredentials(query url.Values) (string, bool) {
+	accessKey := query.Get("AccessKeyId")
+	if token := query.Get("SecurityToken"); token != "" {
+		if token != fakeSessionToken || accessKey != fakeAliyunSessionAK {
+			return "", false
+		}
+		return fakeAliyunSessionSK, true
+	}
+	if accessKey != fakeAliyunAccessKey {
+		return "", false
+	}
+	return fakeAliyunSecretKey, true
 }

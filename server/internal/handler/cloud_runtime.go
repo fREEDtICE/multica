@@ -83,6 +83,69 @@ func (h *Handler) DeleteCloudRuntimeNode(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// Connected cloud accounts (Route B): trust information, role verification
+// and the workspace default runtime. The built-in provisioner implements the
+// /api/v1/accounts/* contract; the managed Fleet ignores these routes.
+func (h *Handler) ListCloudAccounts(w http.ResponseWriter, r *http.Request) {
+	h.proxyCloudRuntime(w, r, http.MethodGet, "/api/v1/accounts", cloudRuntimeProxyOptions{
+		withUserID: true,
+	})
+}
+
+func (h *Handler) GetCloudAccountTrust(w http.ResponseWriter, r *http.Request) {
+	h.proxyCloudRuntime(w, r, http.MethodGet, "/api/v1/accounts/trust", cloudRuntimeProxyOptions{
+		withUserID: true,
+		withQuery:  true,
+	})
+}
+
+func (h *Handler) VerifyCloudAccount(w http.ResponseWriter, r *http.Request) {
+	h.proxyCloudRuntime(w, r, http.MethodPost, "/api/v1/accounts/verify", cloudRuntimeProxyOptions{
+		withUserID: true,
+		withBody:   true,
+	})
+}
+
+func (h *Handler) DeleteCloudAccount(w http.ResponseWriter, r *http.Request) {
+	h.proxyCloudRuntime(w, r, http.MethodDelete, "/api/v1/accounts", cloudRuntimeProxyOptions{
+		withUserID: true,
+		withBody:   true,
+	})
+}
+
+func (h *Handler) GetDefaultCloudRuntime(w http.ResponseWriter, r *http.Request) {
+	h.proxyCloudRuntime(w, r, http.MethodGet, "/api/v1/default-runtime", cloudRuntimeProxyOptions{
+		withUserID: true,
+	})
+}
+
+func (h *Handler) SetDefaultCloudRuntime(w http.ResponseWriter, r *http.Request) {
+	h.proxyCloudRuntime(w, r, http.MethodPut, "/api/v1/default-runtime", cloudRuntimeProxyOptions{
+		withUserID: true,
+		withBody:   true,
+	})
+}
+
+func (h *Handler) CancelCloudRuntimeNode(w http.ResponseWriter, r *http.Request) {
+	h.proxyCloudRuntime(w, r, http.MethodPost, "/api/v1/nodes/cancel", cloudRuntimeProxyOptions{
+		withUserID: true,
+		withBody:   true,
+	})
+}
+
+func (h *Handler) ListCloudRuntimeCleanup(w http.ResponseWriter, r *http.Request) {
+	h.proxyCloudRuntime(w, r, http.MethodGet, "/api/v1/cleanup", cloudRuntimeProxyOptions{
+		withUserID: true,
+	})
+}
+
+func (h *Handler) RetryCloudRuntimeCleanup(w http.ResponseWriter, r *http.Request) {
+	h.proxyCloudRuntime(w, r, http.MethodPost, "/api/v1/cleanup/retry", cloudRuntimeProxyOptions{
+		withUserID: true,
+		withBody:   true,
+	})
+}
+
 func (h *Handler) StartCloudRuntimeNode(w http.ResponseWriter, r *http.Request) {
 	h.proxyCloudRuntime(w, r, http.MethodPost, "/api/v1/nodes/start", cloudRuntimeProxyOptions{
 		withUserID: true,

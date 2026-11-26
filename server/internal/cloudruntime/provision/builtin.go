@@ -19,6 +19,7 @@ type envProvider struct {
 	Mode            string `json:"mode"`
 	Region          string `json:"region"`
 	Endpoint        string `json:"endpoint"`
+	STSEndpoint     string `json:"sts_endpoint"`
 	AccessKeyEnv    string `json:"access_key_env"`
 	SecretKeyEnv    string `json:"secret_key_env"`
 	SessionTokenEnv string `json:"session_token_env"`
@@ -35,6 +36,7 @@ type envDefaults struct {
 
 type envConfig struct {
 	StatePath            string                 `json:"state_path"`
+	AccountPath          string                 `json:"account_path"`
 	WorkspaceURL         string                 `json:"workspace_url"`
 	GatewayURL           string                 `json:"gateway_url"`
 	ReadinessTimeoutSecs int                    `json:"readiness_timeout_seconds"`
@@ -72,7 +74,8 @@ func NewFromEnv() (*LocalProvisioner, error) {
 		}
 	}
 	cfg := Config{
-		Enabled: true, StatePath: raw.StatePath, Providers: providers, Defaults: defaults,
+		Enabled: true, StatePath: raw.StatePath, AccountPath: raw.AccountPath,
+		Providers: providers, Defaults: defaults,
 		WorkspaceURL: raw.WorkspaceURL, GatewayURL: raw.GatewayURL,
 		ReadinessTimeout: time.Duration(raw.ReadinessTimeoutSecs) * time.Second,
 		PollInterval:     time.Duration(raw.PollIntervalMillis) * time.Millisecond,
@@ -84,14 +87,14 @@ func buildProvider(name string, pc envProvider) (CloudProvider, error) {
 	switch name {
 	case ProviderAWS:
 		return NewAwsProvider(AWSConfig{
-			Mode: pc.Mode, Region: pc.Region, Endpoint: pc.Endpoint,
+			Mode: pc.Mode, Region: pc.Region, Endpoint: pc.Endpoint, STSEndpoint: pc.STSEndpoint,
 			AccessKeyEnv:    firstNonEmpty(pc.AccessKeyEnv, "HELIOS_AWS_AK"),
 			SecretKeyEnv:    firstNonEmpty(pc.SecretKeyEnv, "HELIOS_AWS_SK"),
 			SessionTokenEnv: pc.SessionTokenEnv,
 		})
 	case ProviderAliyun:
 		return NewAliyunProvider(AliyunConfig{
-			Mode: pc.Mode, Region: pc.Region, Endpoint: pc.Endpoint,
+			Mode: pc.Mode, Region: pc.Region, Endpoint: pc.Endpoint, STSEndpoint: pc.STSEndpoint,
 			AccessKeyEnv: firstNonEmpty(pc.AccessKeyEnv, "HELIOS_ALIYUN_AK"),
 			SecretKeyEnv: firstNonEmpty(pc.SecretKeyEnv, "HELIOS_ALIYUN_SK"),
 		})

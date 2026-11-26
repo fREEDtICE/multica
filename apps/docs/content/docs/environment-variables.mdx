@@ -433,7 +433,7 @@ First-party self-host telemetry sends one deployment-level snapshot per UTC day 
 
 ## Built-in cloud runtime
 
-When `MULTICA_CLOUD_URL` is unset, set `MULTICA_CLOUD_BUILTIN=true` to open AWS EC2 / Alibaba Cloud ECS Agent runtimes directly instead of through the managed Multica Cloud Fleet. `MULTICA_CLOUD_BUILTIN_CONFIG` carries the JSON configuration: provider credential environment names, region, image, network, state path and readiness timeouts. Leave both unset to keep the default managed-Fleet behavior. An instance receives only an IAM/RAM role reference and a short-lived task lease; long-lived cloud keys are never embedded.
+When `MULTICA_CLOUD_URL` is unset, set `MULTICA_CLOUD_BUILTIN=true` to open AWS EC2 / Alibaba Cloud ECS Agent runtimes directly instead of through the managed Multica Cloud Fleet. `MULTICA_CLOUD_BUILTIN_CONFIG` carries the JSON configuration: provider credential environment names, region, image, network, state path and readiness timeouts. Leave both unset to keep the default managed-Fleet behavior. An instance receives only an IAM/RAM role reference and a short-lived task lease; long-lived cloud keys are never embedded. The configured provider credentials act as the deployment identity and are used only to assume the IAM/RAM role an administrator connects from the product, where only the role ARN is stored; every node operation runs on short-lived STS credentials. When the deployment identity is absent, account connection and provisioning stay disabled with a prompt to contact the deployment administrator.
 
 | Variable | Default | Description |
 |---|---|---|
