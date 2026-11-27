@@ -422,6 +422,15 @@ La télémétrie propre à Multica pour les instances auto-hébergées envoie un
 
 `DO_NOT_TRACK` et `ANALYTICS_DISABLED` sont indépendantes. La première contrôle cet instantané anonyme propre à Multica ; la seconde contrôle l'intégration facultative avec PostHog.
 
+## Exécuteur cloud intégré
+
+Lorsque `MULTICA_CLOUD_URL` n'est pas défini, positionnez `MULTICA_CLOUD_BUILTIN=true` pour ouvrir des exécuteurs Agent AWS EC2 / Alibaba Cloud ECS directement, sans passer par la flotte Multica Cloud gérée. `MULTICA_CLOUD_BUILTIN_CONFIG` contient la configuration JSON : noms des variables d'identification, région, image, réseau, chemin d'état et délais de disponibilité. Laissez les deux variables non définies pour conserver le comportement Fleet géré par défaut. Une instance ne reçoit qu'une référence de rôle IAM/RAM et un bail de tâche de courte durée ; les clés cloud durables ne sont jamais intégrées. Les identifiants fournisseur configurés servent uniquement d'identité de déploiement pour endosser le rôle IAM/RAM qu'un administrateur connecte depuis le produit, où seul l'ARN du rôle est stocké ; chaque opération de nœud utilise des identifiants STS de courte durée. Sans identité de déploiement, la connexion de compte et l'approvisionnement restent désactivés avec une invite à contacter l'administrateur du déploiement.
+
+| Variable | Valeur par défaut | Description |
+|---|---|---|
+| `MULTICA_CLOUD_BUILTIN` | vide (désactivé) | Positionnez `true` pour activer le provisionneur intégré auto-hébergé ; pris en compte uniquement quand `MULTICA_CLOUD_URL` est vide |
+| `MULTICA_CLOUD_BUILTIN_CONFIG` | vide | Configuration JSON du provisionneur intégré |
+
 ## Étapes suivantes
 
 - [Connexion et inscription](/auth-setup) — méthodes de connexion et restrictions d'inscription.

@@ -124,7 +124,11 @@ import type {
   WebhookDelivery,
   WorkspaceMcpServer,
 } from "../types";
-import type { CloudRuntimeNode } from "../runtimes/cloud-runtime";
+import type {
+  CloudRuntimeAccount,
+  CloudRuntimeNode,
+  CloudTrustBundle,
+} from "../runtimes/cloud-runtime";
 import type { CreateFeedbackResponse } from "../feedback/types";
 
 export const PluginConfigFieldSchema = z.object({
@@ -2186,29 +2190,96 @@ export const ChildIssueProgressResponseSchema = z.object({
     .default([]),
 }).loose();
 
+export const CloudRuntimeDriverErrorSchema = z
+  .object({
+    Code: z.string().optional(),
+    code: z.string().optional(),
+    Message: z.string().optional(),
+    message: z.string().optional(),
+    Actionable: z.string().optional(),
+    actionable: z.string().optional(),
+  })
+  .loose();
+
+export const CloudRuntimeNodeEventSchema = z
+  .object({
+    event: z.string(),
+    at: z.string(),
+    note: z.string().default(""),
+  })
+  .loose();
+
 export const CloudRuntimeNodeSchema = z.object({
   id: z.string(),
   owner_id: z.string(),
+  // Optional for older backends; callers treat a missing value as AWS.
+  provider: z.string().optional(),
+  // Route B: the connected account and role under which the node opened.
+  account_id: z.string().default(""),
+  role_arn: z.string().default(""),
   instance_id: z.string(),
   region: z.string(),
   instance_type: z.string(),
   image_id: z.string(),
   subnet_id: z.string(),
+  disk_size_gb: z.number().optional(),
   name: z.string(),
   status: z.string(),
+  // Administrator-facing phase: provisioning → connecting → ready.
+  stage: z.string().default(""),
   tags: z.record(z.string(), z.string()).default({}),
   metadata: z.record(z.string(), z.unknown()).default({}),
+  error: CloudRuntimeDriverErrorSchema.nullable().optional(),
+  events: z.array(CloudRuntimeNodeEventSchema).default([]),
   created_at: z.string(),
   updated_at: z.string(),
 }).loose();
 
 export const CloudRuntimeNodeListSchema = z.array(CloudRuntimeNodeSchema);
 
+export const CloudRuntimeAccountSchema = z.object({
+  id: z.string(),
+  provider: z.string(),
+  label: z.string().default(""),
+  role_arn: z.string(),
+  region: z.string().default(""),
+  status: z.string(),
+  identity: z.record(z.string(), z.string()).nullable().default({}),
+  last_error: CloudRuntimeDriverErrorSchema.nullable().optional(),
+  verified_at: z.string().nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+}).loose();
+
+export const CloudRuntimeAccountListSchema = z
+  .object({ accounts: z.array(CloudRuntimeAccountSchema).default([]) })
+  .loose();
+
+export const CloudTrustBundleSchema = z.object({
+  provider: z.string(),
+  identity_present: z.boolean().default(false),
+  identity: z.record(z.string(), z.string()).optional(),
+  trust_policy: z.string(),
+  permissions_policy: z.string(),
+  console_guide_url: z.string(),
+  role_arn_example: z.string(),
+}).loose();
+
+export const CloudRuntimeCleanupListSchema = z
+  .object({ nodes: z.array(CloudRuntimeNodeSchema).default([]) })
+  .loose();
+
+export const CloudRuntimeDefaultSchema = z
+  .object({ node_id: z.string().default("") })
+  .loose();
+
 export const EMPTY_CLOUD_RUNTIME_NODE_LIST: CloudRuntimeNode[] = [];
 
 export const EMPTY_CLOUD_RUNTIME_NODE: CloudRuntimeNode = {
   id: "",
   owner_id: "",
+  account_id: "",
+  role_arn: "",
   instance_id: "",
   region: "",
   instance_type: "",
@@ -2216,11 +2287,34 @@ export const EMPTY_CLOUD_RUNTIME_NODE: CloudRuntimeNode = {
   subnet_id: "",
   name: "",
   status: "",
+  stage: "",
   tags: {},
   metadata: {},
+  events: [],
   created_at: "",
   updated_at: "",
 };
+
+export const EMPTY_CLOUD_RUNTIME_ACCOUNT: CloudRuntimeAccount = {
+  id: "",
+  provider: "",
+  label: "",
+  role_arn: "",
+  region: "",
+  status: "",
+  identity: {},
+  created_at: "",
+  updated_at: "",
+};
+
+export const EMPTY_CLOUD_TRUST_BUNDLE = (provider: string): CloudTrustBundle => ({
+  provider,
+  identity_present: false,
+  trust_policy: "",
+  permissions_policy: "",
+  console_guide_url: "",
+  role_arn_example: "",
+});
 
 // Workspace dashboard schemas
 //
