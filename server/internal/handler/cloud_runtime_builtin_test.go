@@ -22,8 +22,12 @@ func TestBuiltinCloudRuntimeProvisionThroughHandler(t *testing.T) {
 			provisioner, handle := provision.NewFakeProvisionerHandle(t, providerName, statePath)
 			useCloudRuntimeProxy(t, provisioner)
 
+			// Route B gates provisioning on a connected, verified account.
+			accountID := provision.VerifyFakeAccount(t, provisioner, providerName)
+
 			req := newRequest(http.MethodPost, "/api/cloud-runtime/nodes", map[string]any{
 				"provider":      providerName,
+				"account_id":    accountID,
 				"name":          "builtin-node",
 				"instance_type": "t3.micro",
 			})

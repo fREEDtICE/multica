@@ -101,9 +101,11 @@ func (p *LocalProvisioner) Do(ctx context.Context, req cloudruntime.Request) (*c
 	case req.Path == "/api/v1/default-runtime" && req.Method == http.MethodPut:
 		return p.setDefaultRuntime(req.Body)
 
-	// Node lifecycle.
+	// Node lifecycle. The GET list keeps the managed-Fleet contract (a bare
+	// JSON array), which the web client parses directly; the cleanup queue
+	// below stays a wrapped object because it carries only stranded nodes.
 	case req.Path == "/api/v1/nodes" && req.Method == http.MethodGet:
-		return p.json(http.StatusOK, map[string]any{"nodes": p.store.List()})
+		return p.json(http.StatusOK, p.store.List())
 	case req.Path == "/api/v1/nodes" && req.Method == http.MethodPost:
 		var body createNodeRequest
 		if err := json.Unmarshal(req.Body, &body); err != nil {
@@ -533,7 +535,9 @@ func (p *LocalProvisioner) markCleanupRequired(node *Node, cause error) (*cloudr
 
 // cleanupList returns nodes whose cloud resources could not be reclaimed.
 func (p *LocalProvisioner) cleanupList() []*Node {
-	var pending []*Node
+	// Allocate up front so an empty queue serializes as [] rather than null;
+	// the web client's array schema otherwise has to rely on its Zod default.
+	pending := make([]*Node, 0)
 	for _, node := range p.store.List() {
 		if node.Status == StatusCleanupRequired {
 			pending = append(pending, node)

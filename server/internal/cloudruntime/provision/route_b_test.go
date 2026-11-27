@@ -34,6 +34,23 @@ func doRaw(t *testing.T, p *LocalProvisioner, method, path string, body any, que
 	return resp.StatusCode, out
 }
 
+// doRawBytes returns the raw JSON body for list endpoints whose Fleet
+// contract is a bare array rather than a wrapped object.
+func doRawBytes(t *testing.T, p *LocalProvisioner, method, path string, body any) (int, []byte) {
+	t.Helper()
+	var raw []byte
+	if body != nil {
+		raw, _ = json.Marshal(body)
+	}
+	resp, err := p.Do(context.Background(), cloudruntime.Request{
+		Method: method, Path: path, UserID: fakeOwner, Body: raw,
+	})
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	return resp.StatusCode, resp.Body
+}
+
 func newRouteBProvisioner(t *testing.T, providerName string) (*LocalProvisioner, *fakeCloud, string) {
 	t.Helper()
 	cloud := newFakeCloud(providerName)
@@ -75,6 +92,18 @@ func TestRouteBEmptyWorkspaceGate(t *testing.T) {
 				if text, _ := bundle[key].(string); text == "" {
 					t.Fatalf("trust bundle missing %s: %v", key, bundle)
 				}
+			}
+
+			// Regression: the node list must keep the managed-Fleet contract
+			// (a bare JSON array), not a {nodes: [...]} wrapper, or the web
+			// client parses an empty list.
+			listStatus, rawList := doRawBytes(t, p, http.MethodGet, "/api/v1/nodes", nil)
+			if listStatus != http.StatusOK {
+				t.Fatalf("node list status = %d", listStatus)
+			}
+			var bareList []any
+			if err := json.Unmarshal(rawList, &bareList); err != nil {
+				t.Fatalf("node list must be a bare JSON array, got %s", string(rawList))
 			}
 		})
 	}
@@ -383,12 +412,18 @@ func contains(values []string, want string) bool {
 
 func lookupFailedNodeID(t *testing.T, p *LocalProvisioner) string {
 	t.Helper()
-	_, list := doRaw(t, p, http.MethodGet, "/api/v1/nodes", nil, nil)
-	nodes, _ := list["nodes"].([]any)
-	if len(nodes) != 1 {
-		t.Fatalf("expected one node, got %v", list)
+	status, raw := doRawBytes(t, p, http.MethodGet, "/api/v1/nodes", nil)
+	if status != http.StatusOK {
+		t.Fatalf("node list status = %d body=%s", status, string(raw))
 	}
-	node, _ := nodes[0].(map[string]any)
-	id, _ := node["id"].(string)
+	// The node list follows the Fleet contract: a bare JSON array.
+	var nodes []map[string]any
+	if err := json.Unmarshal(raw, &nodes); err != nil {
+		t.Fatalf("expected a bare node array, got %s", string(raw))
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("expected one node, got %v", nodes)
+	}
+	id, _ := nodes[0]["id"].(string)
 	return id
 }
